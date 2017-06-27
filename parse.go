@@ -21,7 +21,6 @@ func init() {
 }
 
 type Parser struct {
-	inputChan       chan string
 	errorsOccured   []error
 	parsedCalendars map[string]*Calendar
 	statusCalendars int
@@ -31,53 +30,32 @@ type Parser struct {
 // creates new parser
 func New() *Parser {
 	p := new(Parser)
-	p.inputChan = make(chan string)
 	p.errorsOccured = []error{}
 	p.wg = new(sync.WaitGroup)
 	p.parsedCalendars = make(map[string]*Calendar)
 
-	go func(input chan string) {
-		// endless loop for getting the ics urls
-		for {
-			link := <-input
-
-			// mark calendar in the wait group as not parsed
-			p.wg.Add(1)
-
-			// marks that we have statusCalendars +1 calendars to be parsed
-			mutex.Lock()
-			p.statusCalendars++
-			mutex.Unlock()
-
-			go func(link string) {
-				// mark calendar in the wait group as  parsed
-				defer p.wg.Done()
-
-				iCalContent, err := p.getICal(link)
-				if err != nil {
-					p.errorsOccured = append(p.errorsOccured, err)
-
-					mutex.Lock()
-					// marks that we have parsed 1 calendar and we have statusCalendars -1 left to be parsed
-					p.statusCalendars--
-					mutex.Unlock()
-					return
-				}
-
-				// parse the ICal calendar
-				p.parseICalContent(iCalContent, link)
-
-				mutex.Lock()
-				// marks that we have parsed 1 calendar and we have statusCalendars -1 left to be parsed
-				p.statusCalendars--
-				mutex.Unlock()
-
-			}(link)
-		}
-	}(p.inputChan)
-	// p.wg.Wait()
-	// return p.inputChan
 	return p
+}
+
+func (p *Parser) LoadCalendars(inputs []string) {
+	for _, link := range inputs {
+		// mark calendar in the wait group as not parsed
+		p.wg.Add(1)
+
+		go func(link string) {
+			// mark calendar in the wait group as  parsed
+			defer p.wg.Done()
+
+			iCalContent, err := p.getICal(link)
+			if err != nil {
+				p.errorsOccured = append(p.errorsOccured, err)
+				return
+			}
+
+			// parse the ICal calendar
+			p.parseICalContent(iCalContent, link)
+		}(link)
+	}
 }
 
 // Load calender from content
@@ -85,24 +63,15 @@ func (p *Parser) Load(iCalContent string) {
 	p.parseICalContent(iCalContent, "")
 }
 
-//  returns the chan for calendar urls
-func (p *Parser) GetInputChan() chan string {
-	return p.inputChan
-}
-
 // returns the chan where will be received events
 func (p *Parser) GetCalendars() (map[string]*Calendar, error) {
-	if !p.Done() {
-		return nil, errors.New("Calendars not parsed")
-	}
+	p.wg.Wait()
 	return p.parsedCalendars, nil
 }
 
 // returns the array with the errors occurred while parsing the events
 func (p *Parser) GetErrors() ([]error, error) {
-	if !p.Done() {
-		return nil, errors.New("Calendars not parsed")
-	}
+	p.wg.Wait()
 	return p.errorsOccured, nil
 }
 
