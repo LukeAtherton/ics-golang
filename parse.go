@@ -25,7 +25,7 @@ type Parser struct {
 	outputChan      chan *Event
 	bufferedChan    chan *Event
 	errorsOccured   []error
-	parsedCalendars []*Calendar
+	parsedCalendars map[string]*Calendar
 	parsedEvents    []*Event
 	statusCalendars int
 	wg              *sync.WaitGroup
@@ -39,7 +39,7 @@ func New() *Parser {
 	p.bufferedChan = make(chan *Event)
 	p.errorsOccured = []error{}
 	p.wg = new(sync.WaitGroup)
-	p.parsedCalendars = []*Calendar{}
+	p.parsedCalendars = make(map[string]*Calendar)
 	p.parsedEvents = []*Event{}
 
 	// buffers the events output chan
@@ -119,7 +119,7 @@ func (p *Parser) GetOutputChan() chan *Event {
 }
 
 // returns the chan where will be received events
-func (p *Parser) GetCalendars() ([]*Calendar, error) {
+func (p *Parser) GetCalendars() (map[string]*Calendar, error) {
 	if !p.Done() {
 		return nil, errors.New("Calendars not parsed")
 	}
@@ -189,7 +189,7 @@ func (p *Parser) getICal(url string) (string, error) {
 // parses the iCal formated string to a calendar object
 func (p *Parser) parseICalContent(iCalContent, url string) {
 	ical := NewCalendar()
-	p.parsedCalendars = append(p.parsedCalendars, ical)
+	p.parsedCalendars[url] = ical
 
 	// split the data into calendar info and events data
 	eventsData, calInfo := explodeICal(iCalContent)
